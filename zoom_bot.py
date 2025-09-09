@@ -47,7 +47,7 @@ def join_zoom_webinar(zoom_link, email, display_name, process_id):
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     
     # Enable headless mode for server
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--disable-software-rasterizer")  # Additional headless fix
     chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
@@ -71,21 +71,21 @@ def join_zoom_webinar(zoom_link, email, display_name, process_id):
             pass
 
         # Enter email
-        email_input = WebDriverWait(driver, 20).until(
+        email_input = WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.XPATH, EMAIL_INPUT_XPATH))
         )
         email_input.clear()
         email_input.send_keys(email)
 
         # Enter name
-        name_input = WebDriverWait(driver, 20).until(
+        name_input = WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.XPATH, NAME_INPUT_XPATH))
         )
         name_input.clear()
         name_input.send_keys(display_name)
 
         # Click Join
-        join_button = WebDriverWait(driver, 10).until(
+        join_button = WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Join')]"))
         )
         driver.execute_script("arguments[0].scrollIntoView(true);", join_button)
