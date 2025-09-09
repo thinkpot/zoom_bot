@@ -9,6 +9,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 import os
+from webdriver_manager.chrome import ChromeDriverManager
 
 # --- XPaths ---
 EMAIL_INPUT_XPATH = "/html/body/div[2]/div[2]/div/div[1]/div/div/div[2]/div/input"
@@ -27,12 +28,15 @@ def log_status(display_name, message):
     print(f"[{timestamp}] {display_name}: {message}")
 
 def setup_chromedriver():
-    # Manually specify ChromeDriver path (install if not present)
     chromedriver_path = "/usr/local/bin/chromedriver"
     if not os.path.exists(chromedriver_path):
         log_status("Setup", "Installing ChromeDriver manually...")
-        os.system("wget -q -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/128.0.6613.84/chromedriver_linux64.zip")
-        os.system("unzip /tmp/chromedriver.zip -d /usr/local/bin/")
+        # Use the latest stable version (adjust version if needed)
+        chromedriver_url = "https://chromedriver.storage.googleapis.com/128.0.6613.84/chromedriver_linux64.zip"
+        os.system(f"wget -q -O /tmp/chromedriver.zip {chromedriver_url}")
+        if os.system("unzip /tmp/chromedriver.zip -d /usr/local/bin/") != 0:
+            log_status("Setup", "Manual ChromeDriver installation failed, falling back to webdriver-manager")
+            return ChromeDriverManager().install()
         os.system("chmod +x /usr/local/bin/chromedriver")
         os.remove("/tmp/chromedriver.zip")
         log_status("Setup", "ChromeDriver installed at /usr/local/bin/chromedriver")
@@ -44,7 +48,11 @@ def join_zoom_webinar(zoom_link, email, display_name):
     log_status(display_name, f"Starting bot: {display_name} ({email})")
 
     # Set up ChromeDriver
-    chromedriver_path = setup_chromedriver()
+    try:
+        chromedriver_path = setup_chromedriver()
+    except Exception as e:
+        log_status(display_name, f"Failed to set up ChromeDriver: {str(e)}")
+        return
 
     chrome_options = Options()
     chrome_options.add_argument("--no-sandbox")
@@ -66,7 +74,7 @@ def join_zoom_webinar(zoom_link, email, display_name):
     # Enable headless mode for server
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--remote-debugging-port=9222")  # Helpful for debugging
+    chrome_options.add_argument("--remote-debugging-port=9222")
 
     service = Service(chromedriver_path)
     driver = None
