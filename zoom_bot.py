@@ -9,8 +9,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
-import os
 import tempfile
+import shutil
+import os
+import sys
 
 # --- XPaths ---
 EMAIL_INPUT_XPATH = "/html/body/div[2]/div[2]/div/div[1]/div/div/div[2]/div/input"
@@ -30,14 +32,18 @@ def join_zoom_webinar(zoom_link, email, display_name, process_id):
     print(f"[INFO] Using user data dir: {user_data_dir}")
 
     chrome_options = Options()
+    chrome_options.add_argument("--headless=new")  # Modern headless
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-software-rasterizer")
     chrome_options.add_argument("--window-size=1280,800")
     chrome_options.add_argument("--use-fake-ui-for-media-stream")
     chrome_options.add_argument("--use-fake-device-for-media-stream")
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-features=VizDisplayCompositor")
     chrome_options.add_argument(f"user-agent={REAL_USER_AGENT}")
+    chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
     chrome_options.add_experimental_option("prefs", {
         "protocol_handler.excluded_schemes": {"zoommtg": True},
         "profile.default_content_setting_values.notifications": 2,
@@ -45,12 +51,6 @@ def join_zoom_webinar(zoom_link, email, display_name, process_id):
     })
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    
-    # Enable headless mode for server
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--disable-software-rasterizer")  # Additional headless fix
-    chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
 
     service = Service(ChromeDriverManager().install())
     driver = None
@@ -58,39 +58,46 @@ def join_zoom_webinar(zoom_link, email, display_name, process_id):
     try:
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
-        # Force browser join
         direct_browser_url = zoom_link.replace("/j/", "/wc/join/")
         print(f"[INFO] Navigating to {direct_browser_url}")
         driver.get(direct_browser_url)
 
-        # Dismiss popup if appears
+        # Small delay for page to start rendering
+        time.sleep(5)
+
+        # Dismiss any alerts
         try:
             WebDriverWait(driver, 5).until(EC.alert_is_present())
             driver.switch_to.alert.dismiss()
+            print("[INFO] Dismissed alert")
         except:
             pass
 
         # Enter email
+        print("[INFO] Waiting for email input...")
         email_input = WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.XPATH, EMAIL_INPUT_XPATH))
         )
         email_input.clear()
         email_input.send_keys(email)
+        print("[INFO] Email entered")
 
         # Enter name
+        print("[INFO] Waiting for name input...")
         name_input = WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.XPATH, NAME_INPUT_XPATH))
         )
         name_input.clear()
         name_input.send_keys(display_name)
+        print("[INFO] Name entered")
 
         # Click Join
+        print("[INFO] Waiting for Join button...")
         join_button = WebDriverWait(driver, 60).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Join')]"))
         )
         driver.execute_script("arguments[0].scrollIntoView(true);", join_button)
         ActionChains(driver).move_to_element(join_button).click().perform()
-
         print(f"[SUCCESS] {display_name} joined the webinar.")
 
         # Keep session alive
@@ -108,16 +115,13 @@ def join_zoom_webinar(zoom_link, email, display_name, process_id):
         if driver:
             driver.quit()
             print(f"[INFO] Browser closed for {display_name}")
-            # Clean up user data directory
-            import shutil
-            shutil.rmtree(user_data_dir, ignore_errors=True)
+        shutil.rmtree(user_data_dir, ignore_errors=True)
 
 def run_multiple_bots(zoom_link, base_email, base_name, count):
     processes = []
     for i in range(1, count + 1):
-        email = base_email.replace("@", f"+{i}@")  # unique emails
+        email = base_email.replace("@", f"+{i}@")
         name = f"{base_name}_{i}"
-        # Pass a unique process ID (e.g., i) to differentiate user data dirs
         p = Process(target=join_zoom_webinar, args=(zoom_link, email, name, i))
         processes.append(p)
         p.start()
@@ -134,7 +138,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_multiple_bots(args.url, args.email, args.name, args.count)
-
-
-
-# Working 2 in headless
