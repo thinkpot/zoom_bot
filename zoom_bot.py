@@ -11,6 +11,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
 import os
 import tempfile
+import shutil
 
 # --- XPaths ---
 EMAIL_INPUT_XPATH = "/html/body/div[2]/div[2]/div/div[1]/div/div/div[2]/div/input"
@@ -23,11 +24,11 @@ REAL_USER_AGENT = (
 )
 
 def join_zoom_webinar(zoom_link, email, display_name, process_id):
-    print(f"[INFO] Starting bot: {display_name} ({email})")
+    print(f"[DEBUG] Starting bot: {display_name} ({email})")
 
     # Create a unique user data directory for this process
     user_data_dir = tempfile.mkdtemp(prefix=f"chrome_profile_{display_name}_{process_id}_")
-    print(f"[INFO] Using user data dir: {user_data_dir}")
+    print(f"[DEBUG] Created user data dir: {user_data_dir}")
 
     chrome_options = Options()
     chrome_options.add_argument("--no-sandbox")
@@ -45,56 +46,64 @@ def join_zoom_webinar(zoom_link, email, display_name, process_id):
     })
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    
-    # Enable headless mode for server
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--disable-software-rasterizer")  # Additional headless fix
+    chrome_options.add_argument("--disable-software-rasterizer")
     chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
 
+    print(f"[DEBUG] Initializing ChromeDriver...")
     service = Service(ChromeDriverManager().install())
     driver = None
 
     try:
         driver = webdriver.Chrome(service=service, options=chrome_options)
+        print(f"[DEBUG] ChromeDriver initialized successfully")
 
         # Force browser join
         direct_browser_url = zoom_link.replace("/j/", "/wc/join/")
-        print(f"[INFO] Navigating to {direct_browser_url}")
+        print(f"[DEBUG] Navigating to {direct_browser_url}")
         driver.get(direct_browser_url)
 
         # Dismiss popup if appears
         try:
             WebDriverWait(driver, 5).until(EC.alert_is_present())
             driver.switch_to.alert.dismiss()
+            print(f"[DEBUG] Dismissed alert popup")
         except:
-            pass
+            print(f"[DEBUG] No alert popup detected")
 
         # Enter email
+        print(f"[DEBUG] Waiting for email input field...")
         email_input = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.XPATH, EMAIL_INPUT_XPATH))
         )
         email_input.clear()
         email_input.send_keys(email)
+        print(f"[DEBUG] Entered email: {email}")
 
         # Enter name
+        print(f"[DEBUG] Waiting for name input field...")
         name_input = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.XPATH, NAME_INPUT_XPATH))
         )
         name_input.clear()
         name_input.send_keys(display_name)
+        print(f"[DEBUG] Entered name: {display_name}")
 
         # Click Join
+        print(f"[DEBUG] Waiting for Join button...")
         join_button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Join')]"))
         )
         driver.execute_script("arguments[0].scrollIntoView(true);", join_button)
         ActionChains(driver).move_to_element(join_button).click().perform()
+        print(f"[DEBUG] Clicked Join button")
 
         print(f"[SUCCESS] {display_name} joined the webinar.")
 
         # Keep session alive
         while True:
+            print(f"[DEBUG] Keeping session alive for {display_name}...")
             time.sleep(60)
 
     except Exception as e:
@@ -104,20 +113,20 @@ def join_zoom_webinar(zoom_link, email, display_name, process_id):
             driver.save_screenshot(f"error_{display_name}_{ts}.png")
             with open(f"page_{display_name}_{ts}.html", "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
+            print(f"[DEBUG] Saved screenshot and HTML for debugging")
     finally:
         if driver:
             driver.quit()
-            print(f"[INFO] Browser closed for {display_name}")
-            # Clean up user data directory
-            import shutil
-            shutil.rmtree(user_data_dir, ignore_errors=True)
+            print(f"[DEBUG] Browser closed for {display_name}")
+        shutil.rmtree(user_data_dir, ignore_errors=True)
+        print(f"[DEBUG] Cleaned up user data dir: {user_data_dir}")
 
 def run_multiple_bots(zoom_link, base_email, base_name, count):
     processes = []
     for i in range(1, count + 1):
         email = base_email.replace("@", f"+{i}@")  # unique emails
         name = f"{base_name}_{i}"
-        # Pass a unique process ID (e.g., i) to differentiate user data dirs
+        print(f"[DEBUG] Starting process {i} for {name}")
         p = Process(target=join_zoom_webinar, args=(zoom_link, email, name, i))
         processes.append(p)
         p.start()
@@ -133,8 +142,6 @@ if __name__ == "__main__":
     parser.add_argument("--count", type=int, default=1, help="Number of bots to spawn on this machine")
     args = parser.parse_args()
 
+    print("[DEBUG] Starting multiple bot processes...")
     run_multiple_bots(args.url, args.email, args.name, args.count)
-
-
-
-# Working 2 in headless
+    print("[DEBUG] All bot processes finished.")
