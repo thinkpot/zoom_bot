@@ -1,12 +1,10 @@
 import time
 import argparse
-from multiprocessing import Process
+import tempfile
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
 
@@ -20,103 +18,72 @@ REAL_USER_AGENT = (
     "Chrome/128.0.0.0 Safari/537.36"
 )
 
-def join_zoom_webinar(zoom_link, email, display_name):
-    print(f"[INFO] Starting bot: {display_name} ({email})")
+def start_browser_instance(user_email, user_name, bots_per_instance):
+    # Create a unique temporary directory for each instance
+    user_data_dir = tempfile.mkdtemp()
 
+    # Set Chrome options
     chrome_options = Options()
+    chrome_options.add_argument(f"user-data-dir={user_data_dir}")  # Unique user data dir for each bot
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1280,800")
-    chrome_options.add_argument("--use-fake-ui-for-media-stream")
-    chrome_options.add_argument("--use-fake-device-for-media-stream")
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
     chrome_options.add_argument(f"user-agent={REAL_USER_AGENT}")
-    chrome_options.add_experimental_option("prefs", {
-        "protocol_handler.excluded_schemes": {"zoommtg": True},
-        "profile.default_content_setting_values.notifications": 2,
-        "profile.default_content_setting_values.popups": 2
-    })
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    # chrome_options.add_argument("--headless")  # Uncomment for headless mode if running on a server without display
 
+    # Initialize the webdriver with Chrome options
     service = Service(ChromeDriverManager().install())
-    driver = None
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-
-        # Force browser join
-        direct_browser_url = zoom_link.replace("/j/", "/wc/join/")
-        print(f"[INFO] Navigating to {direct_browser_url}")
-        driver.get(direct_browser_url)
-
-        # Dismiss popup if appears
-        try:
-            WebDriverWait(driver, 5).until(EC.alert_is_present())
-            driver.switch_to.alert.dismiss()
-        except:
-            pass
-
+        # Navigate to the Zoom meeting page
+        print(f"[INFO] Starting bot: {user_name} ({user_email})")
+        driver.get("https://zoom.us/join")
+        
         # Enter email
-        email_input = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.XPATH, EMAIL_INPUT_XPATH))
-        )
+        email_input = driver.find_element(By.XPATH, EMAIL_INPUT_XPATH)
         email_input.clear()
-        email_input.send_keys(email)
+        email_input.send_keys(user_email)
 
         # Enter name
-        name_input = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.XPATH, NAME_INPUT_XPATH))
-        )
+        name_input = driver.find_element(By.XPATH, NAME_INPUT_XPATH)
         name_input.clear()
-        name_input.send_keys(display_name)
+        name_input.send_keys(user_name)
 
         # Click Join
-        join_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Join')]"))
-        )
+        join_button = driver.find_element(By.XPATH, "//button[contains(text(),'Join')]")
         driver.execute_script("arguments[0].scrollIntoView(true);", join_button)
         ActionChains(driver).move_to_element(join_button).click().perform()
 
-        print(f"[SUCCESS] {display_name} joined the webinar.")
+        print(f"[SUCCESS] {user_name} joined the webinar.")
 
-        # Keep session alive
+        # Keep the session alive for a while (or until manually stopped)
         while True:
             time.sleep(60)
 
     except Exception as e:
-        print(f"[ERROR] {display_name} failed: {e}")
-        if driver:
-            ts = time.strftime("%Y%m%d-%H%M%S")
-            driver.save_screenshot(f"error_{display_name}_{ts}.png")
-            with open(f"page_{display_name}_{ts}.html", "w", encoding="utf-8") as f:
-                f.write(driver.page_source)
+        print(f"[ERROR] {user_name} failed: {e}")
     finally:
-        if driver:
-            driver.quit()
-            print(f"[INFO] Browser closed for {display_name}")
+        driver.quit()
+        print(f"[INFO] Browser closed for {user_name}")
 
-def run_multiple_bots(zoom_link, base_email, base_name, count):
-    processes = []
-    for i in range(1, count + 1):
-        email = base_email.replace("@", f"+{i}@")  # unique emails
-        name = f"{base_name}_{i}"
-        p = Process(target=join_zoom_webinar, args=(zoom_link, email, name))
-        processes.append(p)
-        p.start()
+def run_multiple_bots(webinar_url, base_email, base_name, bots_per_instance, count):
+    for i in range(count):
+        # Create unique email for each bot (by appending a number to the base email)
+        user_email = f"{base_email.split('@')[0]}+{i}@{base_email.split('@')[1]}"
+        user_name = f"{base_name}_{i + 1}"
 
-    for p in processes:
-        p.join()
+        start_browser_instance(user_email, user_name, bots_per_instance)
 
 if __name__ == "__main__":
+    # Command-line arguments for the script
     parser = argparse.ArgumentParser(description="Zoom Webinar Bot")
     parser.add_argument("--url", required=True, help="Zoom webinar/join link")
     parser.add_argument("--email", required=True, help="Base email (will be made unique)")
     parser.add_argument("--name", required=True, help="Base display name")
     parser.add_argument("--count", type=int, default=1, help="Number of bots to spawn on this machine")
+    parser.add_argument("--bots-per-instance", type=int, default=5, help="Number of bots per instance")
     args = parser.parse_args()
 
-    run_multiple_bots(args.url, args.email, args.name, args.count)
-
-# Working
+    # Run the bots
+    run_multiple_bots(args.url, args.email, args.name, args.bots_per_instance, args.count)
