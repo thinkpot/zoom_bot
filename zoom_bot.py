@@ -9,10 +9,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
+import os
 import tempfile
 import shutil
-import os
-import sys
 
 # --- XPaths ---
 EMAIL_INPUT_XPATH = "/html/body/div[2]/div[2]/div/div[1]/div/div/div[2]/div/input"
@@ -24,26 +23,28 @@ REAL_USER_AGENT = (
     "Chrome/128.0.0.0 Safari/537.36"
 )
 
+def slow_type(element, text, delay=0.05):
+    """Type characters one by one with a small delay"""
+    for char in text:
+        element.send_keys(char)
+        time.sleep(delay)
+
 def join_zoom_webinar(zoom_link, email, display_name, process_id):
     print(f"[INFO] Starting bot: {display_name} ({email})")
 
-    # Create a unique user data directory for this process
+    # Unique user data dir
     user_data_dir = tempfile.mkdtemp(prefix=f"chrome_profile_{display_name}_{process_id}_")
     print(f"[INFO] Using user data dir: {user_data_dir}")
 
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")  # Modern headless
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--disable-software-rasterizer")
     chrome_options.add_argument("--window-size=1280,800")
     chrome_options.add_argument("--use-fake-ui-for-media-stream")
     chrome_options.add_argument("--use-fake-device-for-media-stream")
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-features=VizDisplayCompositor")
     chrome_options.add_argument(f"user-agent={REAL_USER_AGENT}")
-    chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
     chrome_options.add_experimental_option("prefs", {
         "protocol_handler.excluded_schemes": {"zoommtg": True},
         "profile.default_content_setting_values.notifications": 2,
@@ -51,53 +52,51 @@ def join_zoom_webinar(zoom_link, email, display_name, process_id):
     })
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    
+    # Headless mode
+    chrome_options.add_argument("--headless=new")  # new headless mode
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-software-rasterizer")
+    chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+    chrome_options.add_argument("--remote-debugging-port=9222")
 
     service = Service(ChromeDriverManager().install())
     driver = None
 
     try:
         driver = webdriver.Chrome(service=service, options=chrome_options)
-
         direct_browser_url = zoom_link.replace("/j/", "/wc/join/")
         print(f"[INFO] Navigating to {direct_browser_url}")
         driver.get(direct_browser_url)
 
-        # Small delay for page to start rendering
-        time.sleep(5)
-
-        # Dismiss any alerts
-        try:
-            WebDriverWait(driver, 5).until(EC.alert_is_present())
-            driver.switch_to.alert.dismiss()
-            print("[INFO] Dismissed alert")
-        except:
-            pass
-
-        # Enter email
+        # Wait until email input is present
         print("[INFO] Waiting for email input...")
         email_input = WebDriverWait(driver, 60).until(
-            EC.element_to_be_clickable((By.XPATH, EMAIL_INPUT_XPATH))
+            EC.presence_of_element_located((By.XPATH, EMAIL_INPUT_XPATH))
         )
-        email_input.clear()
-        email_input.send_keys(email)
-        print("[INFO] Email entered")
+        driver.execute_script("arguments[0].scrollIntoView(true);", email_input)
+        time.sleep(1)
+        email_input.click()
+        slow_type(email_input, email)
 
-        # Enter name
+        # Wait for name input
         print("[INFO] Waiting for name input...")
         name_input = WebDriverWait(driver, 60).until(
-            EC.element_to_be_clickable((By.XPATH, NAME_INPUT_XPATH))
+            EC.presence_of_element_located((By.XPATH, NAME_INPUT_XPATH))
         )
-        name_input.clear()
-        name_input.send_keys(display_name)
-        print("[INFO] Name entered")
+        driver.execute_script("arguments[0].scrollIntoView(true);", name_input)
+        time.sleep(1)
+        name_input.click()
+        slow_type(name_input, display_name)
 
         # Click Join
-        print("[INFO] Waiting for Join button...")
-        join_button = WebDriverWait(driver, 60).until(
+        print("[INFO] Clicking Join button...")
+        join_button = WebDriverWait(driver, 30).until(
             EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Join')]"))
         )
         driver.execute_script("arguments[0].scrollIntoView(true);", join_button)
         ActionChains(driver).move_to_element(join_button).click().perform()
+
         print(f"[SUCCESS] {display_name} joined the webinar.")
 
         # Keep session alive
