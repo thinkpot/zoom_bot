@@ -1,6 +1,7 @@
 import time
 import argparse
 import tempfile
+import shutil
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -65,7 +66,9 @@ def start_browser_instance(user_email, user_name, bots_per_instance):
         print(f"[ERROR] {user_name} failed: {e}")
     finally:
         driver.quit()
-        print(f"[INFO] Browser closed for {user_name}")
+        # Clean up the temporary directory after the session is finished
+        shutil.rmtree(user_data_dir)
+        print(f"[INFO] Browser closed for {user_name}, and temporary data directory cleaned up.")
 
 def run_multiple_bots(webinar_url, base_email, base_name, bots_per_instance, count):
     for i in range(count):
