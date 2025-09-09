@@ -9,9 +9,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
-import tempfile
-import shutil
 import os
+import tempfile
 
 # --- XPaths ---
 EMAIL_INPUT_XPATH = "/html/body/div[2]/div[2]/div/div[1]/div/div/div[2]/div/input"
@@ -20,14 +19,14 @@ NAME_INPUT_XPATH = "/html/body/div[2]/div[2]/div/div[1]/div/div/div[3]/div/input
 REAL_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/140.0.7339.80 Safari/537.36"
+    "Chrome/128.0.0.0 Safari/537.36"
 )
 
-def join_zoom_webinar(zoom_link, email, display_name, headless=True):
+def join_zoom_webinar(zoom_link, email, display_name, process_id):
     print(f"[INFO] Starting bot: {display_name} ({email})")
 
-    # Create unique user profile
-    user_data_dir = tempfile.mkdtemp(prefix=f"chrome_profile_{display_name}_")
+    # Create a unique user data directory for this process
+    user_data_dir = tempfile.mkdtemp(prefix=f"chrome_profile_{display_name}_{process_id}_")
     print(f"[INFO] Using user data dir: {user_data_dir}")
 
     chrome_options = Options()
@@ -46,12 +45,12 @@ def join_zoom_webinar(zoom_link, email, display_name, headless=True):
     })
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    
+    # Enable headless mode for server
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-software-rasterizer")  # Additional headless fix
     chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
-
-    if headless:
-        chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--disable-software-rasterizer")
 
     service = Service(ChromeDriverManager().install())
     driver = None
@@ -64,7 +63,7 @@ def join_zoom_webinar(zoom_link, email, display_name, headless=True):
         print(f"[INFO] Navigating to {direct_browser_url}")
         driver.get(direct_browser_url)
 
-        # Dismiss alert if any
+        # Dismiss popup if appears
         try:
             WebDriverWait(driver, 5).until(EC.alert_is_present())
             driver.switch_to.alert.dismiss()
@@ -109,14 +108,17 @@ def join_zoom_webinar(zoom_link, email, display_name, headless=True):
         if driver:
             driver.quit()
             print(f"[INFO] Browser closed for {display_name}")
-        shutil.rmtree(user_data_dir, ignore_errors=True)
+            # Clean up user data directory
+            import shutil
+            shutil.rmtree(user_data_dir, ignore_errors=True)
 
-def run_multiple_bots(zoom_link, base_email, base_name, count, headless=True):
+def run_multiple_bots(zoom_link, base_email, base_name, count):
     processes = []
     for i in range(1, count + 1):
         email = base_email.replace("@", f"+{i}@")  # unique emails
         name = f"{base_name}_{i}"
-        p = Process(target=join_zoom_webinar, args=(zoom_link, email, name, headless))
+        # Pass a unique process ID (e.g., i) to differentiate user data dirs
+        p = Process(target=join_zoom_webinar, args=(zoom_link, email, name, i))
         processes.append(p)
         p.start()
 
@@ -129,7 +131,10 @@ if __name__ == "__main__":
     parser.add_argument("--email", required=True, help="Base email (will be made unique)")
     parser.add_argument("--name", required=True, help="Base display name")
     parser.add_argument("--count", type=int, default=1, help="Number of bots to spawn on this machine")
-    parser.add_argument("--headless", action="store_true", help="Run Chrome in headless mode")
     args = parser.parse_args()
 
-    run_multiple_bots(args.url, args.email, args.name, args.count, args.headless)
+    run_multiple_bots(args.url, args.email, args.name, args.count)
+
+
+
+# Working 2 in headless
