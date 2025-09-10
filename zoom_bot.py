@@ -9,6 +9,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from webdriver_manager.chrome import ChromeDriverManager
+import os
+import tempfile
 
 # --- XPaths ---
 EMAIL_INPUT_XPATH = "/html/body/div[2]/div[2]/div/div[1]/div/div/div[2]/div/input"
@@ -20,8 +22,12 @@ REAL_USER_AGENT = (
     "Chrome/128.0.0.0 Safari/537.36"
 )
 
-def join_zoom_webinar(zoom_link, email, display_name):
+def join_zoom_webinar(zoom_link, email, display_name, process_id):
     print(f"[INFO] Starting bot: {display_name} ({email})")
+
+    # Create a unique user data directory for this process
+    user_data_dir = tempfile.mkdtemp(prefix=f"chrome_profile_{display_name}{process_id}")
+    print(f"[INFO] Using user data dir: {user_data_dir}")
 
     chrome_options = Options()
     chrome_options.add_argument("--no-sandbox")
@@ -39,6 +45,12 @@ def join_zoom_webinar(zoom_link, email, display_name):
     })
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    
+    # Enable headless mode for server
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-software-rasterizer")  # Additional headless fix
+    chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
 
     service = Service(ChromeDriverManager().install())
     driver = None
@@ -96,13 +108,17 @@ def join_zoom_webinar(zoom_link, email, display_name):
         if driver:
             driver.quit()
             print(f"[INFO] Browser closed for {display_name}")
+            # Clean up user data directory
+            import shutil
+            shutil.rmtree(user_data_dir, ignore_errors=True)
 
 def run_multiple_bots(zoom_link, base_email, base_name, count):
     processes = []
     for i in range(1, count + 1):
         email = base_email.replace("@", f"+{i}@")  # unique emails
         name = f"{base_name}_{i}"
-        p = Process(target=join_zoom_webinar, args=(zoom_link, email, name))
+        # Pass a unique process ID (e.g., i) to differentiate user data dirs
+        p = Process(target=join_zoom_webinar, args=(zoom_link, email, name, i))
         processes.append(p)
         p.start()
 
@@ -119,4 +135,6 @@ if _name_ == "_main_":
 
     run_multiple_bots(args.url, args.email, args.name, args.count)
 
-# Working
+
+
+# Working 2 in headless
