@@ -26,7 +26,7 @@ def join_zoom_webinar(zoom_link, email, display_name, process_id):
     print(f"[INFO] Starting bot: {display_name} ({email})")
 
     # Create a unique user data directory for this process
-    user_data_dir = tempfile.mkdtemp(prefix=f"chrome_profile_{display_name}{process_id}")
+    user_data_dir = tempfile.mkdtemp(prefix=f"chrome_profile_{display_name}_{process_id}_")
     print(f"[INFO] Using user data dir: {user_data_dir}")
 
     chrome_options = Options()
@@ -125,7 +125,7 @@ def run_multiple_bots(zoom_link, base_email, base_name, count):
     for p in processes:
         p.join()
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Zoom Webinar Bot")
     parser.add_argument("--url", required=True, help="Zoom webinar/join link")
     parser.add_argument("--email", required=True, help="Base email (will be made unique)")
