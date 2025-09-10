@@ -12,6 +12,16 @@ from webdriver_manager.chrome import ChromeDriverManager
 import os
 import tempfile
 
+from urllib.parse import urlparse
+
+def convert_to_wc_link(link):
+    """Convert standard Zoom /j/ link to /wc/join/ link (keeping passcode if present)."""
+    parsed = urlparse(link)
+    meeting_id = parsed.path.split("/")[-1]
+    query = parsed.query
+    return f"https://{parsed.hostname}/wc/join/{meeting_id}?{query}"
+
+
 # --- XPaths ---
 EMAIL_INPUT_XPATH = "/html/body/div[2]/div[2]/div/div[1]/div/div/div[2]/div/input"
 NAME_INPUT_XPATH = "/html/body/div[2]/div[2]/div/div[1]/div/div/div[3]/div/input"
@@ -59,9 +69,11 @@ def join_zoom_webinar(zoom_link, email, display_name, process_id):
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
         # Force browser join
-        direct_browser_url = zoom_link.replace("/j/", "/wc/join/")
+        # Force browser join using proper WC link
+        direct_browser_url = convert_to_wc_link(zoom_link)
         print(f"[INFO] Navigating to {direct_browser_url}")
         driver.get(direct_browser_url)
+
 
         # Dismiss popup if appears
         try:
